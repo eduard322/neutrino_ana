@@ -16,8 +16,8 @@ from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from lightgbm import LGBMClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-
-
+import seaborn as sns
+from sklearn.tree import DecisionTreeClassifier
 
 
 class ML_pipeline:
@@ -26,6 +26,7 @@ class ML_pipeline:
         data_obj.read_parq()
         print("Done!")
         self.Data = data_obj.Data_conv
+        print(self.Data["mu"].columns)
         self.list_of_interest = list_of_interest
     
     
@@ -126,17 +127,18 @@ class ML_pipeline:
         df_muon["anglePhadrandPmuon"] = np.arccos((df_muon["px_hadr"]*df_muon["px_mu"] + df_muon["py_hadr"]*df_muon["py_mu"] + df_muon["pz_hadr"]*df_muon["pz_mu"])/(p_muon*p_hadr))
 
         df_muon["anglePhadrandPmuon"] = 180*df_muon["anglePhadrandPmuon"]/np.pi
-
+        print(df_muon)
         corrected_weight = df_muon.query("label == 'nutau'")["weight_mu"] / 5.
         df_muon.loc[:, "weight_mu"] = pd.Series(df_muon.query("label == 'numu'")["weight_mu"].to_list() + corrected_weight.to_list())
 
         df_muon_1 = df_muon.dropna()
-        # excluded_list = ['Number_mu', 'id_mu', 'm_id_mu', 'final_mu', 'Xin_mu', 'Yin_mu', 'Zin_mu', 'Rin_mu',
-        #     'Number_hadr', 'id_hadr', 'm_id_hadr', 'final_hadr', 'Xin_hadr', 'Yin_hadr', 'Zin_hadr', 'Rin_hadr',
-        #     'weight_hadr', 'px_miss', 'py_miss', 'px_hadr', 'py_hadr', 'pz_hadr', 'P_in_hadr', 'P_hadr', 'P_in_mu', 
-        #                 'Pt_miss_old', 'Pt_mu_old', 'P_mu_old', 'Pt_hadr_old', 'P_hadr_old']
+        print(df_muon)
+        excluded_list = ['Number_mu', 'id_mu', 'm_id_mu', 'final_mu', 'Xin_mu', 'Yin_mu', 'Zin_mu', 'Rin_mu',
+            'Number_hadr', 'id_hadr', 'm_id_hadr', 'final_hadr', 'Xin_hadr', 'Yin_hadr', 'Zin_hadr', 'Rin_hadr',
+            'weight_hadr', 'px_miss', 'py_miss', 'px_hadr', 'py_hadr', 'pz_hadr', 'P_in_hadr', 'P_hadr', 'P_in_mu', 
+                        'Pt_miss_old', 'Pt_mu_old', 'P_mu_old', 'Pt_hadr_old', 'P_hadr_old']
 
-        self.df_muon_1 = df_muon_1.loc[:, df_muon_1.columns.isin(self.list_of_interest)]
+        self.df_muon_1 = df_muon_1.loc[:, ~df_muon_1.columns.isin(excluded_list)]
         # print("Removing label and weights from list_of_interest...")
         # self.list_of_interest = self.list_of_interest.remove("label").remove("weight_mu")
         print("Done!")        
@@ -154,7 +156,7 @@ class ML_pipeline:
             Data_conv = self.df_muon_1
         else:
             Data_conv = self.df_muon_1.query(condition_on_dataset)
-
+        print(f"{Data_conv.columns} to be plotted...")
         nutau_events_number = len(Data_conv.query("label == 'nutau'")["E_mu"])
         weighted_nutau_events_number = Data_conv.query("label == 'nutau'")["weight_mu"].sum()/self.df_muon_1.query("label == 'nutau'")["weight_mu"].sum()
         print(f"Number of nutau events {nutau_events_number}, percentage: {weighted_nutau_events_number*100}%")
@@ -165,8 +167,8 @@ class ML_pipeline:
         for param in list_of_interest:
             min_mu, min_tau = min(Data_conv.query("label == 'numu'")[param]), min(Data_conv.query("label == 'nutau'")[param])
             max_mu, max_tau = max(Data_conv.query("label == 'numu'")[param]), max(Data_conv.query("label == 'nutau'")[param])
-            print(f"{param}. Range for numu: [{min_mu} {max_mu}]")
-            print(f"{param}. Range for nutau: [{min_tau} {max_tau}]")
+            #print(f"{param}. Range for numu: [{min_mu} {max_mu}]")
+            #print(f"{param}. Range for nutau: [{min_tau} {max_tau}]")
             if (min_tau > max_mu and max_tau > max_mu) or (min_tau < min_mu and max_tau < min_mu):
                 print("alarm")
                 
@@ -193,8 +195,8 @@ class ML_pipeline:
             ax.axvline(h_tau[1][np.argmax(h_tau[0])], color = "orange")
             av_point = (h_tau[1][np.argmax(h_tau[0])] + h_mu[1][np.argmax(h_mu[0])])/2
             diff_point = np.abs(h_tau[1][np.argmax(h_tau[0])] - h_mu[1][np.argmax(h_mu[0])])/av_point
-            print(f"average point: {(h_tau[1][np.argmax(h_tau[0])] + h_mu[1][np.argmax(h_mu[0])])/2}, difference: {diff_point*100}")
-            print(f"tau point: {h_tau[1][np.argmax(h_tau[0])]}")
+            #print(f"average point: {(h_tau[1][np.argmax(h_tau[0])] + h_mu[1][np.argmax(h_mu[0])])/2}, difference: {diff_point*100}")
+            #print(f"tau point: {h_tau[1][np.argmax(h_tau[0])]}")
             if diff_point*100 > 100:
                 good_params.append(param)
             ax.set_yscale("log")
@@ -203,6 +205,14 @@ class ML_pipeline:
             ax.set_title(param + f". {diff_point*100:.0f} % difference btw MPV")
             ax.legend()
             fig.savefig(f"./pics/{param.replace('/', '_') if '/' in param else param}.pdf")
+        
+
+
+        corr_matrix = Data_conv.drop(columns = ["label", "weight_mu"]).corr(method='spearman')
+        # fig, ax1 = plt.subplots(figsize = (8,8), dpi = 200)
+        res = sns.clustermap(corr_matrix, method='weighted', cmap='coolwarm', figsize=(16, 16))
+        plt.savefig('pics/corr_matrix_0.pdf', format='pdf')
+        #plt.show()
         print("Done!")
 
     def train_and_test(self, condition_on_dataset = None, random_state = 13):
@@ -241,7 +251,8 @@ class ML_pipeline:
         X_train, X_test, y_train, y_test = train_test_split(
             X_pca, df_muon_2["label"].map({'numu':0,'nutau':1}).values, 
             random_state=random_state,  
-            shuffle=True
+            shuffle=True,
+            stratify=df_muon_2["label"].map({'numu':0,'nutau':1}).values
         )
 
 
@@ -256,7 +267,7 @@ class ML_pipeline:
                             n_estimators=1, 
                             num_leaves = 31
                             )
-        
+        #model = DecisionTreeClassifier(max_depth=-1, num_leaves = 31)
         model.fit(
             X_train, y_train,
             sample_weight=w_train,

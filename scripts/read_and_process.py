@@ -51,14 +51,14 @@ class Read_and_Process_Raw_Files:
             self.Data[file]["Rin"] = np.sqrt(self.Data[file]["Xin"]**2 + self.Data[file]["Yin"]**2 + self.Data[file]["Zin"]**2)
 
     def write_parq(self):
-        for part, file in zip(self.Data, [self.parq_title_mu, self.parq_title_tau]):
-            table = pa.Table.from_pandas(self.Data[part])
+        for part, file in zip(self.part_list, [self.parq_title_mu, self.parq_title_tau]):
+            table = pa.Table.from_pandas(self.part_list[part])
             pq.write_table(table, f"./data/{file}")
     
     @timeit
     def read_parq(self):
         self.Data_conv = {}
-        for part, file in zip(self.Data, [self.parq_title_mu, self.parq_title_tau]):
+        for part, file in zip(["mu", "tau"], [self.parq_title_mu, self.parq_title_tau]):
             self.Data_conv[part] = pq.read_table(f"./data/{file}").to_pandas()
 
     @timeit
@@ -95,17 +95,17 @@ class Read_and_Process_Raw_Files:
             ind_out = binary_search(energy, energy_list, low, high)
             return weight_list[ind_out]
         
-        mu_weight, tau_weight = pd.read_csv(f"./input_flux/{self.experiment}_numu_flux.data", header = None, sep = "\s+"), pd.read_csv(f"./input_flux/{self.experiment}_numu_flux.data", header = None, sep = "\s+")
-        part_list = {"mu": [], "tau": []} 
+        mu_weight, tau_weight = pd.read_csv(f"./input_flux/{self.experiment}_numu_flux.data", header = None, sep = "\s+"), pd.read_csv(f"./input_flux/{self.experiment}_nutau_flux.data", header = None, sep = "\s+")
+        self.part_list = {"mu": [], "tau": []} 
         weight_temp = 0
         columns_old = list(self.Data["mu"].columns[:]) + ["weight"]
         for index, row in self.Data["mu"].iterrows():
             if np.abs(row["id"]) == 14 and row["m_id"] == -1:
                 weight_temp = define_w(row["E"], mu_weight[1].to_list(), mu_weight[0].to_list())
 
-            part_list["mu"].append(row.to_list() + [weight_temp])
-        part_list["mu"] = pd.DataFrame(part_list["mu"])
-        part_list["mu"].columns = columns_old
+            self.part_list["mu"].append(row.to_list() + [weight_temp])
+        self.part_list["mu"] = pd.DataFrame(self.part_list["mu"])
+        self.part_list["mu"].columns = columns_old
 
         weight_temp = 0
         fig, ax = plt.subplots(figsize = (6,6), dpi = 150)
@@ -114,7 +114,7 @@ class Read_and_Process_Raw_Files:
             if np.abs(row["id"]) == 16 and row["m_id"] == -1:
                 weight_temp = define_w(row["E"], tau_weight[1].to_list(), tau_weight[0].to_list())
             if np.abs(row["id"]) != 15:
-                part_list["tau"].append(row.to_list() + [weight_temp])
+                self.part_list["tau"].append(row.to_list() + [weight_temp])
             else:
                 tau_list, nu_mu, nu_tau = setdecay_df_single_3body(row[["px", "py", "pz", "E"]])
                 [px, py, pz, E] = tau_list
@@ -123,9 +123,9 @@ class Read_and_Process_Raw_Files:
                 e_dict["e_mu"].append(tau_list[-1]), e_dict["e_nu_mu"].append(nu_mu[-1]), e_dict["e_nu_tau"].append(nu_tau[-1])
                 P = np.sqrt(px**2 + py**2 + pz**2)         
                 old_part = row[["Event", "Number"]].to_list() + [13, row["m_id"], row["name"]] + tau_list + row[["final", "Xin", "Yin", "Zin"]].to_list() + [row["Rin"], weight_temp]
-                part_list["tau"].append(old_part)
-        part_list["tau"] = pd.DataFrame(part_list["tau"])
-        part_list["tau"].columns = list(self.Data["tau"].columns) + ["weight"]
+                self.part_list["tau"].append(old_part)
+        self.part_list["tau"] = pd.DataFrame(self.part_list["tau"])
+        self.part_list["tau"].columns = list(self.Data["tau"].columns) + ["weight"]
         
         for e_l in e_dict:
             ax.hist(e_dict[e_l], bins = 150, label = e_l)
@@ -133,4 +133,3 @@ class Read_and_Process_Raw_Files:
         ax.set_xlabel("Energy [GeV]")
         ax.set_title("3-body decay kinematics of $\\tau \\rightarrow \mu\nu\nu$")
         fig.show()
-        return part_list, e_dict
