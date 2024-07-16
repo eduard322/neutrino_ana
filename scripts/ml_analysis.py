@@ -18,7 +18,13 @@ from lightgbm import LGBMClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import seaborn as sns
 from sklearn.tree import DecisionTreeClassifier
-
+import lightgbm
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold, GridSearchCV, cross_validate, cross_val_score
+from sklearn.metrics import auc
+from sklearn.metrics import RocCurveDisplay
+from sklearn.metrics import PrecisionRecallDisplay
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import roc_auc_score
 
 class ML_pipeline:
     def __init__(self, data_obj, list_of_interest = None):
@@ -32,7 +38,7 @@ class ML_pipeline:
     
 
 
-    def construct_dataset(self, neutrals = []):
+    def construct_dataset(self, neutrals = [], smearing = False):
         print("Constructing dataset for classification...")
         print(f"Excluding following neutrals: {neutrals}")
         muon_data_numu = self.Data["mu"].query("final == 1 & m_id == 0 & abs(id) == 13").copy().set_index("Event").drop(columns = ["name"])
@@ -63,15 +69,16 @@ class ML_pipeline:
         #df_muon["pz_miss"] = df_muon["P_nu"].values - df_muon["pz_mu"].values - df_muon["pz_hadr"].values
         #df_muon["P_miss"] = np.sqrt(df_muon["px_miss"]**2 + df_muon["py_miss"]**2 + df_muon["pz_miss"]**2)
         ### smearing
-        # df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.1*df_muon["E_hadr"])
-        # df_muon["E_mu"] = np.random.normal(df_muon["E_mu"], 0.15*df_muon["E_mu"])
+        if smearing:
+            df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.1*df_muon["E_hadr"])
+            df_muon["E_mu"] = np.random.normal(df_muon["E_mu"], 0.15*df_muon["E_mu"])
         ###
 
         muon_sin = np.sqrt(df_muon["px_mu"].values**2 + df_muon["py_mu"].values**2)/np.sqrt(df_muon["px_mu"].values**2 + df_muon["py_mu"].values**2 + df_muon["pz_mu"].values**2)
         hadr_sin = np.sqrt(df_muon["px_hadr"].values**2 + df_muon["py_hadr"].values**2)/np.sqrt(df_muon["px_hadr"].values**2 + df_muon["py_hadr"].values**2 + df_muon["pz_hadr"].values**2)
         df_muon["Pt_miss"] = np.abs(df_muon["E_hadr"].values*hadr_sin - df_muon["E_mu"].values*muon_sin)
         df_muon["Pt_hadr"] = df_muon["E_hadr"].values*hadr_sin
-        df_muon["Pt_mu"] = df_muon["E_mu"].values*muon_sin
+        #df_muon["Pt_mu"] = df_muon["E_mu"].values*muon_sin
 
 
         df_muon["Pt_miss_old"] = np.sqrt(df_muon["px_miss"]**2 + df_muon["py_miss"]**2)
@@ -90,16 +97,16 @@ class ML_pipeline:
         # df_muon["Pt_hadr"] = df_muon["Pt_hadr_old"]
         # df_muon["Pt_mu"] = df_muon["Pt_mu_old"]
 
-        df_muon["Pt_miss/E_mu"] = df_muon["Pt_miss"]/df_muon["E_mu"]
-        df_muon["Pt_miss/E_hadr"] = df_muon["Pt_miss"]/df_muon["E_hadr"]
-        df_muon["Pt_miss/Pt_mu"] = df_muon["Pt_miss"]/df_muon["Pt_mu"]
-        df_muon["Pt_miss/Pt_hadr"] = df_muon["Pt_miss"]/df_muon["Pt_hadr"]
-        df_muon["E_mu/E_hadr"] = df_muon["E_mu"]/df_muon["E_hadr"]
-        df_muon["Pt_mu/Pt_hadr"] = df_muon["Pt_mu"]/df_muon["Pt_hadr"]
-        df_muon["Pt_mu/E_hadr"] = df_muon["Pt_mu"]/df_muon["E_hadr"]
-        df_muon["Pt_hadr/E_mu"] = df_muon["Pt_hadr"]/df_muon["E_mu"]
+        # df_muon["Pt_miss/E_mu"] = df_muon["Pt_miss"]/df_muon["E_mu"]
+        # df_muon["Pt_miss/E_hadr"] = df_muon["Pt_miss"]/df_muon["E_hadr"]
+        # df_muon["Pt_miss/Pt_mu"] = df_muon["Pt_miss"]/df_muon["Pt_mu"]
+        # df_muon["Pt_miss/Pt_hadr"] = df_muon["Pt_miss"]/df_muon["Pt_hadr"]
+        # df_muon["E_mu/E_hadr"] = df_muon["E_mu"]/df_muon["E_hadr"]
+        # df_muon["Pt_mu/Pt_hadr"] = df_muon["Pt_mu"]/df_muon["Pt_hadr"]
+        # df_muon["Pt_mu/E_hadr"] = df_muon["Pt_mu"]/df_muon["E_hadr"]
+        # df_muon["Pt_hadr/E_mu"] = df_muon["Pt_hadr"]/df_muon["E_mu"]
 
-        df_muon["Pt_missxE_mu"] = df_muon["Pt_miss"]*df_muon["E_mu"]
+        #df_muon["Pt_missxE_mu"] = df_muon["Pt_miss"]*df_muon["E_mu"]
 
         # df_muon["E_mu/Pt_miss"] = df_muon["E_mu"]/df_muon["Pt_miss"]
         # df_muon["E_hadr/Pt_miss"] = df_muon["E_hadr"]/df_muon["Pt_miss"]
@@ -136,7 +143,10 @@ class ML_pipeline:
         excluded_list = ['Number_mu', 'id_mu', 'm_id_mu', 'final_mu', 'Xin_mu', 'Yin_mu', 'Zin_mu', 'Rin_mu',
             'Number_hadr', 'id_hadr', 'm_id_hadr', 'final_hadr', 'Xin_hadr', 'Yin_hadr', 'Zin_hadr', 'Rin_hadr',
             'weight_hadr', 'px_miss', 'py_miss', 'px_hadr', 'py_hadr', 'pz_hadr', 'P_in_hadr', 'P_hadr', 'P_in_mu', 
-                        'Pt_miss_old', 'Pt_mu_old', 'P_mu_old', 'Pt_hadr_old', 'P_hadr_old']
+                        'Pt_miss_old', 'Pt_mu_old', 'P_mu_old', 'Pt_hadr_old', 'P_hadr_old', 'pz_mu', 
+                        'Pt_miss/Pt_hadr', 'Pt_miss/Pt_mu', 'Pt_miss/E_mu', 'Pt_miss/E_mu', 'Pt_mu/Pt_hadr', 
+                        #'anglePtmuonandPthadr'
+                        ]
 
         self.df_muon_1 = df_muon_1.loc[:, ~df_muon_1.columns.isin(excluded_list)]
         # print("Removing label and weights from list_of_interest...")
@@ -245,21 +255,31 @@ class ML_pipeline:
 
         X = df_muon_2.drop(columns=['label', 'weight_mu']).values
         X_pca = X
-        X_pca = np.hstack((X_pca, df_muon_2['weight_mu'].values.reshape(-1, 1)))
+        # X_pca = np.hstack((X_pca, df_muon_2['weight_mu'].values.reshape(-1, 1)))
+        
+        for i, feat in enumerate(df_muon_2.drop(columns=['label', 'weight_mu']).columns):
+            print(i, feat)
 
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_pca, df_muon_2["label"].map({'numu':0,'nutau':1}).values, 
+        X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+            X_pca, df_muon_2["label"].map({'numu':0,'nutau':1}).values, df_muon_2['weight_mu'].values,
             random_state=random_state,  
             shuffle=True,
             stratify=df_muon_2["label"].map({'numu':0,'nutau':1}).values
         )
+        
+        X_test_0 = pd.DataFrame(X_test)
+        X_test_0.columns = df_muon_2.drop(columns=['label', 'weight_mu']).columns
+        X_test_0["weight"] = pd.Series(w_test)
+        X_test_0["label"] = pd.Series(y_test)
+        nutau_ev = X_test_0.query("Pt_miss > 0.621")["weight"].sum()
+        numu_ev = X_test_0.query("Pt_miss <= 0.621")["weight"].sum()
+        print(nutau_ev/X_test_0.query("label == 1")["weight"].sum(), numu_ev/X_test_0.query("label == 0")["weight"].sum())
+        # exit(0)
 
-
-        w_train = X_train[:,-1]
-        X_train = X_train[:,:-1]
-        w_test = X_test[:,-1]
-        X_test = X_test[:,:-1]
+        # w_train = X_train[:,-1]
+        # X_train = X_train[:,:-1]
+        # w_test = X_test[:,-1]
+        # X_test = X_test[:,:-1]
 
         # Initialize the LightGBM classifier
         model = LGBMClassifier(boosting_type = "gbdt", objective='binary', metric='binary_logloss', 
@@ -271,12 +291,36 @@ class ML_pipeline:
         model.fit(
             X_train, y_train,
             sample_weight=w_train,
+            
         )
+        pred_proba = model.predict_proba(X_test)[:, 1]
 
+        # Calculate ROC-AUC score
+        roc_auc = roc_auc_score(y_test, pred_proba, sample_weight=w_test)
+        print(f'ROC-AUC Score: {roc_auc:.2f}')
+
+        # Plot histogram of predicted probabilities
+        plt.figure(figsize=(12, 8), dpi=100)
+        plt.hist(pred_proba[y_test == 1], bins=50, alpha=1.0, histtype = "step", label='nutau', weights=w_test[y_test == 1])
+        plt.hist(pred_proba[y_test == 0], bins=50, alpha=1.0, histtype = "step", label='numu', weights=w_test[y_test == 0])
+        plt.yscale("log")
+        plt.xlabel('Predicted Probability')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of Predicted Probabilities')
+        plt.legend(loc='upper right')
+        plt.grid(True)
+        plt.show()
+        fig, ax = plt.subplots(dpi = 200)
+        lightgbm.plot_tree(model, ax = ax)
+        # lightgbm.create_tree_digraph(model)
+        fig.savefig("pics/tree.pdf")
+        fig.show()
         y_pred = model.predict(X_test)
         print('Classification Report:\n', classification_report(y_test, y_pred, sample_weight = w_test))
         print('Confusion Matrix:\n', confusion_matrix(y_test, y_pred, sample_weight = w_test))
-
+        print(f"Fraction comparison nutau: {confusion_matrix(y_test, y_pred, sample_weight = w_test)[1][1]/X_test_0.query("label == 1")["weight"].sum()}")
+        print(f"Fraction comparison numu: {confusion_matrix(y_test, y_pred, sample_weight = w_test)[0][0]/X_test_0.query("label == 0")["weight"].sum()}")
+        #exit(0)
         # Bootstrap
         def bootstrap_metric(x, 
                             y,
@@ -318,5 +362,78 @@ class ML_pipeline:
         boot_mat_score = bootstrap_metric(y_test, y_pred, w_test, metric_fn=lambda x, y, w: my_metric(y_true=x, y_pred=y, sample_weight=w) , alpha = alpha)
         print("Model: {0}".format("BDT"), " \t signal_noise-score: ", np.quantile(boot_mat_score, q=[alpha/2, 1 - alpha/2]))
         
+
+
+
+                # Run classifier with cross-validation and plot ROC curves
+        cv = StratifiedKFold(n_splits=6)
+
+        tprs = []
+        aucs = []
+        mean_fpr = np.linspace(0, 1, 100)
+
+        y = df_muon_2["label"].map({'numu':0,'nutau':1}).values
+
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=100)
+        plt.grid()
+
+        # Assuming weights is an array of sample weights corresponding to the samples in X
+        weights = df_muon_2['weight_mu'].values
+        model = LGBMClassifier(boosting_type = "gbdt", objective='binary', metric='binary_logloss', 
+                    max_depth=-1, 
+                    n_estimators=1, 
+                    num_leaves = 31
+                    )
+        for i, (train, test) in enumerate(cv.split(X, y)):
+            model.fit(X[train], y[train], sample_weight=weights[train])
+            viz = RocCurveDisplay.from_estimator(
+                model,
+                X[test],
+                y[test],
+                sample_weight=weights[test],  # Use sample weights for the ROC computation
+                name="ROC fold {}".format(i),
+                alpha=0.3,
+                lw=1,
+                ax=ax,
+            )
+            interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+            interp_tpr[0] = 0.0
+            tprs.append(interp_tpr)
+            aucs.append(viz.roc_auc)
+
+        ax.plot([0, 1], [0, 1], linestyle="--", lw=2, color="r", label="Chance", alpha=0.8)
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
+        mean_auc = auc(mean_fpr, mean_tpr)
+        std_auc = np.std(aucs)
+        ax.plot(
+            mean_fpr,
+            mean_tpr,
+            color="b",
+            label=r"Mean ROC (AUC = %0.2f $\pm$ %0.2f)" % (mean_auc, std_auc),
+            lw=2,
+            alpha=0.8,
+        )
+
+        std_tpr = np.std(tprs, axis=0)
+        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+        ax.fill_between(
+            mean_fpr,
+            tprs_lower,
+            tprs_upper,
+            color="grey",
+            alpha=0.2,
+            label=r"$\pm$ 1 std. dev.",
+        )
+
+        ax.set(
+            xlim=[-0.05, 1.05],
+            ylim=[-0.05, 1.05],
+            title="ROC-AUC metrics",
+        )
+        ax.legend(loc="lower right")
+        plt.show()
         print("Done!")
         
