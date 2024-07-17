@@ -38,7 +38,7 @@ class ML_pipeline:
     
 
 
-    def construct_dataset(self, neutrals = [], smearing = False):
+    def construct_dataset(self, neutrals = [], condition_on_dataset = None, smearing = False):
         print("Constructing dataset for classification...")
         print(f"Excluding following neutrals: {neutrals}")
         muon_data_numu = self.Data["mu"].query("final == 1 & m_id == 0 & abs(id) == 13").copy().set_index("Event").drop(columns = ["name"])
@@ -64,21 +64,27 @@ class ML_pipeline:
         muon_data_nutau = pd.concat([muon_data_nutau, hadron_data_nutau], axis = 1)
         muon_data_nutau["label"] = pd.Series(len(muon_data_nutau["id_mu"])*["nutau"])
         df_muon = pd.concat([muon_data_numu, muon_data_nutau], ignore_index = True)
+        ### smearing
+        if smearing:
+            # np.random.seed()
+            df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.1*df_muon["E_hadr"])
+            df_muon["E_mu"] = np.random.normal(df_muon["E_mu"], 0.15*df_muon["E_mu"])
+            df_muon["px_mu"] = np.random.normal(df_muon["px_mu"], 0.06*np.abs(df_muon["px_mu"]))
+            df_muon["py_mu"] = np.random.normal(df_muon["py_mu"], 0.06*np.abs(df_muon["py_mu"]))
+            df_muon["px_hadr"] = np.random.normal(df_muon["px_hadr"], 0.09*np.abs(df_muon["px_hadr"]))
+            df_muon["py_hadr"] = np.random.normal(df_muon["py_hadr"], 0.09*np.abs(df_muon["py_hadr"]))
+        ###
         df_muon["px_miss"] = -df_muon["px_mu"].values - df_muon["px_hadr"].values
         df_muon["py_miss"] = -df_muon["py_mu"].values - df_muon["py_hadr"].values
         #df_muon["pz_miss"] = df_muon["P_nu"].values - df_muon["pz_mu"].values - df_muon["pz_hadr"].values
         #df_muon["P_miss"] = np.sqrt(df_muon["px_miss"]**2 + df_muon["py_miss"]**2 + df_muon["pz_miss"]**2)
-        ### smearing
-        if smearing:
-            df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.1*df_muon["E_hadr"])
-            df_muon["E_mu"] = np.random.normal(df_muon["E_mu"], 0.15*df_muon["E_mu"])
-        ###
+
 
         muon_sin = np.sqrt(df_muon["px_mu"].values**2 + df_muon["py_mu"].values**2)/np.sqrt(df_muon["px_mu"].values**2 + df_muon["py_mu"].values**2 + df_muon["pz_mu"].values**2)
         hadr_sin = np.sqrt(df_muon["px_hadr"].values**2 + df_muon["py_hadr"].values**2)/np.sqrt(df_muon["px_hadr"].values**2 + df_muon["py_hadr"].values**2 + df_muon["pz_hadr"].values**2)
         df_muon["Pt_miss"] = np.abs(df_muon["E_hadr"].values*hadr_sin - df_muon["E_mu"].values*muon_sin)
         df_muon["Pt_hadr"] = df_muon["E_hadr"].values*hadr_sin
-        #df_muon["Pt_mu"] = df_muon["E_mu"].values*muon_sin
+        df_muon["Pt_mu"] = df_muon["E_mu"].values*muon_sin
 
 
         df_muon["Pt_miss_old"] = np.sqrt(df_muon["px_miss"]**2 + df_muon["py_miss"]**2)
@@ -97,16 +103,16 @@ class ML_pipeline:
         # df_muon["Pt_hadr"] = df_muon["Pt_hadr_old"]
         # df_muon["Pt_mu"] = df_muon["Pt_mu_old"]
 
-        # df_muon["Pt_miss/E_mu"] = df_muon["Pt_miss"]/df_muon["E_mu"]
-        # df_muon["Pt_miss/E_hadr"] = df_muon["Pt_miss"]/df_muon["E_hadr"]
-        # df_muon["Pt_miss/Pt_mu"] = df_muon["Pt_miss"]/df_muon["Pt_mu"]
-        # df_muon["Pt_miss/Pt_hadr"] = df_muon["Pt_miss"]/df_muon["Pt_hadr"]
-        # df_muon["E_mu/E_hadr"] = df_muon["E_mu"]/df_muon["E_hadr"]
-        # df_muon["Pt_mu/Pt_hadr"] = df_muon["Pt_mu"]/df_muon["Pt_hadr"]
-        # df_muon["Pt_mu/E_hadr"] = df_muon["Pt_mu"]/df_muon["E_hadr"]
-        # df_muon["Pt_hadr/E_mu"] = df_muon["Pt_hadr"]/df_muon["E_mu"]
+        df_muon["Pt_miss/E_mu"] = df_muon["Pt_miss"]/df_muon["E_mu"]
+        df_muon["Pt_miss/E_hadr"] = df_muon["Pt_miss"]/df_muon["E_hadr"]
+        df_muon["Pt_miss/Pt_mu"] = df_muon["Pt_miss"]/df_muon["Pt_mu"]
+        df_muon["Pt_miss/Pt_hadr"] = df_muon["Pt_miss"]/df_muon["Pt_hadr"]
+        df_muon["E_mu/E_hadr"] = df_muon["E_mu"]/df_muon["E_hadr"]
+        df_muon["Pt_mu/Pt_hadr"] = df_muon["Pt_mu"]/df_muon["Pt_hadr"]
+        df_muon["Pt_mu/E_hadr"] = df_muon["Pt_mu"]/df_muon["E_hadr"]
+        df_muon["Pt_hadr/E_mu"] = df_muon["Pt_hadr"]/df_muon["E_mu"]
 
-        #df_muon["Pt_missxE_mu"] = df_muon["Pt_miss"]*df_muon["E_mu"]
+        df_muon["Pt_missxE_mu"] = df_muon["Pt_miss"]*df_muon["E_mu"]
 
         # df_muon["E_mu/Pt_miss"] = df_muon["E_mu"]/df_muon["Pt_miss"]
         # df_muon["E_hadr/Pt_miss"] = df_muon["E_hadr"]/df_muon["Pt_miss"]
@@ -134,25 +140,90 @@ class ML_pipeline:
         df_muon["anglePhadrandPmuon"] = np.arccos((df_muon["px_hadr"]*df_muon["px_mu"] + df_muon["py_hadr"]*df_muon["py_mu"] + df_muon["pz_hadr"]*df_muon["pz_mu"])/(p_muon*p_hadr))
 
         df_muon["anglePhadrandPmuon"] = 180*df_muon["anglePhadrandPmuon"]/np.pi
-        print(df_muon)
+        #print(df_muon)
         corrected_weight = df_muon.query("label == 'nutau'")["weight_mu"] / 5.
         df_muon.loc[:, "weight_mu"] = pd.Series(df_muon.query("label == 'numu'")["weight_mu"].to_list() + corrected_weight.to_list())
 
         df_muon_1 = df_muon.dropna()
-        print(df_muon)
+        #print(df_muon)
         excluded_list = ['Number_mu', 'id_mu', 'm_id_mu', 'final_mu', 'Xin_mu', 'Yin_mu', 'Zin_mu', 'Rin_mu',
             'Number_hadr', 'id_hadr', 'm_id_hadr', 'final_hadr', 'Xin_hadr', 'Yin_hadr', 'Zin_hadr', 'Rin_hadr',
             'weight_hadr', 'px_miss', 'py_miss', 'px_hadr', 'py_hadr', 'pz_hadr', 'P_in_hadr', 'P_hadr', 'P_in_mu', 
                         'Pt_miss_old', 'Pt_mu_old', 'P_mu_old', 'Pt_hadr_old', 'P_hadr_old', 'pz_mu', 
-                        'Pt_miss/Pt_hadr', 'Pt_miss/Pt_mu', 'Pt_miss/E_mu', 'Pt_miss/E_mu', 'Pt_mu/Pt_hadr', 
+                        #'Pt_miss/Pt_hadr', 'Pt_miss/Pt_mu', 'Pt_miss/E_mu', 'Pt_miss/E_mu', 'Pt_mu/Pt_hadr', 
                         #'anglePtmuonandPthadr'
                         ]
 
         self.df_muon_1 = df_muon_1.loc[:, ~df_muon_1.columns.isin(excluded_list)]
         # print("Removing label and weights from list_of_interest...")
         # self.list_of_interest = self.list_of_interest.remove("label").remove("weight_mu")
+
+        if condition_on_dataset is None:
+            pass
+        else:
+            self.df_muon_1 = self.df_muon_1.query(condition_on_dataset)
         print("Done!")        
 
+    def check_smearing(self, number_of_tries = 10):
+        pt_mu = []
+        pt_tau = []
+        pt_mu_weight = []
+        pt_tau_weight = []
+        condition_on_dataset = "anglePhadrandPmuon < 15."
+        for n in range(number_of_tries):
+            self.construct_dataset(smearing=True, condition_on_dataset=condition_on_dataset)
+            pt_mu.append(self.df_muon_1.query("label == 'numu'")["Pt_miss"])
+            pt_tau.append(self.df_muon_1.query("label == 'nutau'")["Pt_miss"])
+            pt_mu_weight.append(self.df_muon_1.query("label == 'numu'")["weight_mu"])
+            pt_tau_weight.append(self.df_muon_1.query("label == 'nutau'")["weight_mu"])       
+            print(n, pt_mu[-1].values.mean(), pt_tau[-1].values.mean())
+        
+        fig, ax = plt.subplots(figsize = (12,12), dpi = 100)
+        difs = []
+        difs_mu, difs_tau = [], []
+        for n in range(number_of_tries):
+            bins = np.logspace(np.log10(1e-5), np.log10(1e2), 200)
+            #bins = np.linspace(min(Data_conv[param]), max(Data_conv[param]), 200)
+
+            h_mu = ax.hist(pt_mu[n], histtype = "step", 
+                    #density = True, 
+                    weights = pt_mu_weight[n],
+                    bins = bins, label = f"numu_{n}", alpha=0.2)
+
+            #ax.axvline(h_mu[1][np.argmax(h_mu[0])], color = "blue")
+            h_tau = ax.hist(pt_tau[n], histtype = "step", 
+                    #density = True, 
+                    weights = pt_tau_weight[n],
+                    bins = bins, label = f"nutau_{n}", alpha=0.2)
+            diff_point = np.abs(h_tau[1][np.argmax(h_tau[0])] - h_mu[1][np.argmax(h_mu[0])])
+            difs.append(diff_point)
+            difs_mu.append(h_mu[1][np.argmax(h_mu[0])])
+            difs_tau.append(h_tau[1][np.argmax(h_tau[0])])
+            print(n, h_mu[1][np.argmax(h_mu[0])], h_tau[1][np.argmax(h_tau[0])])
+
+
+        self.construct_dataset(smearing=False, condition_on_dataset=condition_on_dataset)
+        Data_conv = self.df_muon_1
+        h_mu = ax.hist(Data_conv.query("label == 'numu'")["Pt_miss"], histtype = "step", 
+                #density = True, 
+                weights = Data_conv.query("label == 'numu'")["weight_mu"],
+                bins = bins, label = "numu")
+        #ax.axvline(h_mu[1][np.argmax(h_mu[0])], color = "blue")
+        h_tau = ax.hist(Data_conv.query("label == 'nutau'")["Pt_miss"], histtype = "step", 
+                #density = True, 
+                weights = Data_conv.query("label == 'nutau'")["weight_mu"],
+                bins = bins, label = "nutau")  
+        diff_point_1 = np.abs(h_tau[1][np.argmax(h_tau[0])] - h_mu[1][np.argmax(h_mu[0])])
+        print(f"No smearing: {h_mu[1][np.argmax(h_mu[0])]}, {h_tau[1][np.argmax(h_tau[0])]}, dif: {h_tau[1][np.argmax(h_tau[0])] - h_mu[1][np.argmax(h_mu[0])]}")
+        print(f"Smearing average: {np.array(difs_mu).mean()}, {np.array(difs_tau).mean()}, dif: {np.array(difs_tau).mean() - np.array(difs_mu).mean()}")
+        ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.set_xlabel("Pt_miss")
+        difs = np.array(difs)
+        ax.set_title(f"Difference btw MPV of Pt_miss is: {difs.mean():.2f} +- {difs.std():.2f}. W/o smearing:  {diff_point_1:.2f}")
+        ax.legend()
+        fig.savefig("pics/smearing_pt_miss.pdf")
+        plt.show()
 
     def feature_vis(self, condition_on_dataset = None):
         print("Visualising the features...")
@@ -309,16 +380,16 @@ class ML_pipeline:
         plt.title('Histogram of Predicted Probabilities')
         plt.legend(loc='upper right')
         plt.grid(True)
-        plt.show()
+        #plt.show()
         fig, ax = plt.subplots(dpi = 200)
         lightgbm.plot_tree(model, ax = ax)
         # lightgbm.create_tree_digraph(model)
         fig.savefig("pics/tree.pdf")
-        fig.show()
+        #fig.show()
         y_pred = model.predict(X_test)
         print('Classification Report:\n', classification_report(y_test, y_pred, sample_weight = w_test))
         print('Confusion Matrix:\n', confusion_matrix(y_test, y_pred, sample_weight = w_test))
-        print(f"Fraction comparison nutau: {confusion_matrix(y_test, y_pred, sample_weight = w_test)[1][1]/X_test_0.query("label == 1")["weight"].sum()}")
+        print(f"Fraction comparison nutau: {confusion_matrix(y_test, y_pred, sample_weight = w_test)[1][1]/X_test_0.query("label == 1")["weight"].sum()}, {X_test_0.query("label == 1")["weight"].sum()}")
         print(f"Fraction comparison numu: {confusion_matrix(y_test, y_pred, sample_weight = w_test)[0][0]/X_test_0.query("label == 0")["weight"].sum()}")
         #exit(0)
         # Bootstrap
@@ -434,6 +505,6 @@ class ML_pipeline:
             title="ROC-AUC metrics",
         )
         ax.legend(loc="lower right")
-        plt.show()
+        #plt.show()
         print("Done!")
         
