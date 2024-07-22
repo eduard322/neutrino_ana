@@ -34,6 +34,7 @@ class ML_pipeline:
         self.Data = data_obj.Data_conv
         print(self.Data["mu"].columns)
         self.list_of_interest = list_of_interest
+        self.tau_decayed = data_obj.tau_decayed
     
     
 
@@ -48,31 +49,57 @@ class ML_pipeline:
         #####
         muon_data_numu.columns = [col + "_mu" for col in muon_data_numu.columns]
         hadron_data_numu.columns = [col + "_hadr" for col in hadron_data_numu.columns]
-        nu_data_numu = pd.DataFrame(self.Data["mu"].query("m_id == -1 & abs(id) == 14")["pz"])
-        nu_data_numu.columns = ["P_nu"]
+        self.nu_data_numu = pd.DataFrame(self.Data["mu"].query("m_id == -1 & abs(id) == 14")["E"])
+        self.nu_data_numu.columns = ["P_nu"]
         muon_data_numu = pd.concat([muon_data_numu, hadron_data_numu], axis = 1)
         muon_data_numu["label"] = pd.Series(len(muon_data_numu["id_mu"])*["numu"])
-        muon_data_nutau = self.Data["tau"].query("final == 1 & m_id == 0 & abs(id) == 13").copy().set_index("Event").drop(columns = ["name"])
+        #####
+        #muon_data_nutau = self.Data["tau"].query("final == 1 & m_id == 0 & abs(id) == 13").copy().set_index("Event").drop(columns = ["name"])
+        muon_data_nutau = self.Data["tau"].query(f"final == 1 & m_id == {4 if self.tau_decayed else 0} & abs(id) == 13").copy().set_index("Event").drop(columns = ["name"])
         #####
         #hadron_data_nutau = self.Data["tau"].loc[~self.Data["tau"].name.isin(neutrals)].query("final == 1 & m_id != 0 & pz > 0").drop(columns = ["name"]).groupby("Event").sum()
         hadron_data_nutau = self.Data["tau"].query("id == 2000000001").drop(columns = ["name"]).groupby("Event").sum()
         #####
         muon_data_nutau.columns = [col + "_mu" for col in muon_data_nutau.columns]
         hadron_data_nutau.columns = [col + "_hadr" for col in hadron_data_nutau.columns]
-        nu_data_nutau = pd.DataFrame(self.Data["tau"].query("m_id == -1 & abs(id) == 16")["pz"])
-        nu_data_nutau.columns = ["P_nu"]
-        muon_data_nutau = pd.concat([muon_data_nutau, hadron_data_nutau], axis = 1)
+        self.nu_data_nutau = pd.DataFrame(self.Data["tau"].query("m_id == -1 & abs(id) == 16")["E"])
+        self.nu_data_nutau.columns = ["P_nu"]
+ 
+        muon_data_nutau = pd.concat([muon_data_nutau, hadron_data_nutau], axis = 1).dropna()
+        muon_data_nutau = 
         muon_data_nutau["label"] = pd.Series(len(muon_data_nutau["id_mu"])*["nutau"])
+        print(muon_data_nutau.dropna())
+        ####
+        fig, ax = plt.subplots()
+        #ax.hist(self.nu_data_numu["P_nu"].values - muon_data_numu["E_mu"].values - muon_data_numu["E_hadr"].values)
+        #ax.set_xlabel("E_nu - E_mu - E_hadr [GeV]")
+        #ax.scatter(x = muon_data_numu["E_mu"].values + muon_data_numu["E_hadr"].values, y = self.nu_data_numu["P_nu"].values)
+        #ax.hist(muon_data_nutau["P_nu"].values - muon_data_nutau["E_mu"].values - muon_data_nutau["E_hadr"].values, bins = 50, histtype = "step")
+        # cond = "Event >= 0"
+        # Data_mu = self.Data["tau"].query(cond)
+        # # Data_mu = Data_mu.loc[~Data_mu["Event"].isin(black_list)]
+        # nutau = Data_mu.query(f"id == 16 & m_id == -1")
+        # muons = Data_mu.query(f"id == 13 & m_id == 4")
+        # hadrons = Data_mu.query(f"id == 2000000001")
+        # taus = Data_mu.query(f"id == 15 & m_id == 0")
+        # print(f"numu:\n {nutau} \n muons:\n {muons} \n hadrons:\n {hadrons}, \n taus:\n {taus}")
+        # subtract = nutau['E'].values - muons['E'].values - hadrons['E'].values
+        
+        # ax.hist(subtract, bins = 50, histtype = "step")
+        # ax.set_ylabel("E_nu")
+        plt.show()
+        exit(0)
+        ####
         df_muon = pd.concat([muon_data_numu, muon_data_nutau], ignore_index = True)
         ### smearing
         if smearing:
             # np.random.seed()
-            df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.1*df_muon["E_hadr"])
+            df_muon["E_hadr"] = np.random.normal(df_muon["E_hadr"], 0.2*df_muon["E_hadr"])
             df_muon["E_mu"] = np.random.normal(df_muon["E_mu"], 0.15*df_muon["E_mu"])
-            df_muon["px_mu"] = np.random.normal(df_muon["px_mu"], 0.06*np.abs(df_muon["px_mu"]))
-            df_muon["py_mu"] = np.random.normal(df_muon["py_mu"], 0.06*np.abs(df_muon["py_mu"]))
-            df_muon["px_hadr"] = np.random.normal(df_muon["px_hadr"], 0.09*np.abs(df_muon["px_hadr"]))
-            df_muon["py_hadr"] = np.random.normal(df_muon["py_hadr"], 0.09*np.abs(df_muon["py_hadr"]))
+            df_muon["px_mu"] = np.random.normal(df_muon["px_mu"], 0.09*np.abs(df_muon["px_mu"]))
+            df_muon["py_mu"] = np.random.normal(df_muon["py_mu"], 0.09*np.abs(df_muon["py_mu"]))
+            df_muon["px_hadr"] = np.random.normal(df_muon["px_hadr"], 0.11*np.abs(df_muon["px_hadr"]))
+            df_muon["py_hadr"] = np.random.normal(df_muon["py_hadr"], 0.11*np.abs(df_muon["py_hadr"]))
         ###
         df_muon["px_miss"] = -df_muon["px_mu"].values - df_muon["px_hadr"].values
         df_muon["py_miss"] = -df_muon["py_mu"].values - df_muon["py_hadr"].values
@@ -248,8 +275,8 @@ class ML_pipeline:
         for param in list_of_interest:
             min_mu, min_tau = min(Data_conv.query("label == 'numu'")[param]), min(Data_conv.query("label == 'nutau'")[param])
             max_mu, max_tau = max(Data_conv.query("label == 'numu'")[param]), max(Data_conv.query("label == 'nutau'")[param])
-            #print(f"{param}. Range for numu: [{min_mu} {max_mu}]")
-            #print(f"{param}. Range for nutau: [{min_tau} {max_tau}]")
+            print(f"{param}. Range for numu: [{min_mu} {max_mu}]")
+            print(f"{param}. Range for nutau: [{min_tau} {max_tau}]")
             if (min_tau > max_mu and max_tau > max_mu) or (min_tau < min_mu and max_tau < min_mu):
                 print("alarm")
                 
@@ -355,8 +382,11 @@ class ML_pipeline:
         # Initialize the LightGBM classifier
         model = LGBMClassifier(boosting_type = "gbdt", objective='binary', metric='binary_logloss', 
                             max_depth=-1, 
-                            n_estimators=1, 
-                            num_leaves = 31
+                            n_estimators=100, 
+                            num_leaves = 31,
+                            # min_child_samples = 30,
+                            min_split_gain = 1,
+                            reg_lambda = 1.0
                             )
         #model = DecisionTreeClassifier(max_depth=-1, num_leaves = 31)
         model.fit(

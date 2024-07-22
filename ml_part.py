@@ -19,29 +19,30 @@ parser.add_argument('--experiment', dest='experiment',
 args = parser.parse_args()
 
 read_obj = read_and_process.Read_and_Process_Raw_Files(experiment = args.experiment, 
-                                                       form = "normal")
+                                                       form = "normal",
+                                                       tau_decayed = True)
 
 
 ml_pipe = ml_analysis.ML_pipeline(data_obj = read_obj, 
                                   list_of_interest = list_of_interest)
 
 
-#neutrals = ["pi0", "neutron", "gamma", 'K0', 'K0_bar', 'K_L0', 'Lambda0', 'Lambda0_bar', "antineutron", 'nu_e_bar']
+# neutrals = ["pi0", "neutron", "gamma", 'K0', 'K0_bar', 'K_L0', 'Lambda0', 'Lambda0_bar', "antineutron", 'nu_e_bar']
 #neutrals = ["neutron", "antineutron", 'nu_e_bar', 'K0', 'K0_bar', 'K_L0', 'HardBlob']
 
 neutrals = []
 
 
-ml_pipe.construct_dataset(neutrals = neutrals, smearing = True)
+ml_pipe.construct_dataset(neutrals = neutrals, smearing = False)
 
 
 condition_on_dataset = "anglePhadrandPmuon < 15."
 #condition_on_dataset = None
 
 
-ml_pipe.check_smearing(number_of_tries=10)
-ml_pipe.feature_vis(condition_on_dataset = condition_on_dataset)
-ml_pipe.train_and_test(condition_on_dataset = condition_on_dataset, random_state = 13)
+#ml_pipe.check_smearing(number_of_tries=10)
+#ml_pipe.feature_vis(condition_on_dataset = condition_on_dataset)
+#ml_pipe.train_and_test(condition_on_dataset = condition_on_dataset, random_state = 13)
 
 
 
