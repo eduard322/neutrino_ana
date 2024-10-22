@@ -27,11 +27,11 @@ class Read_and_Process_Raw_Files:
         self.tau_decayed = tau_decayed
         if self.files is not None:
             self.config_init = {key: filename for key,filename in zip(["mu", "tau"], [f"./raw_data/{file}" for file in self.files])}
-        self.parq_title_mu = f"mu_weighted_E_{self.experiment}_fixed.parquet"
-        if not self.tau_decayed:
-            self.parq_title_tau = f"tau_weighted_E_{self.experiment}_fixed.parquet"
-        else:
-            self.parq_title_tau = f"tau_weighted_E_{self.experiment}_fixed_decayed.parquet"            
+
+        # self.parq_title_tau = f"tau_weighted_E_{self.experiment}_fixed{'_decayed' if self.tau_decayed else ''}.parquet"       
+        # self.parq_title_mu = f"mu_weighted_E_{self.experiment}_fixed.parquet"     
+        self.parq_title_tau = self.files[1] + f"{'_decayed' if self.tau_decayed else ''}.parquet"
+        self.parq_title_mu = self.files[0] + ".parquet"
         print("Done!")
     def timeit(func):
         @wraps(func)
@@ -118,7 +118,7 @@ class Read_and_Process_Raw_Files:
             e_dict = {"e_mu": [], "e_nu_mu": [], "e_nu_tau": []}
             for index, row in self.Data["tau"].iterrows():
                 if np.abs(row["id"]) == 16 and row["m_id"] == -1:
-                    weight_temp = define_w(row["E"], tau_weight[1].to_list(), tau_weight[0].to_list())
+                    weight_temp = define_w(row["E"], tau_weight[1].to_list(), tau_weight[0].to_list()) / 5.
                 if np.abs(row["id"]) != 15:
                     self.part_list["tau"].append(row.to_list() + [weight_temp])
                 else:
@@ -144,8 +144,17 @@ class Read_and_Process_Raw_Files:
             columns_old = list(self.Data["tau"].columns[:]) + ["weight"]
             for index, row in self.Data["tau"].iterrows():
                 if np.abs(row["id"]) == 16 and row["m_id"] == -1:
-                    weight_temp = define_w(row["E"], tau_weight[1].to_list(), tau_weight[0].to_list())
+                    weight_temp = define_w(row["E"], tau_weight[1].to_list(), tau_weight[0].to_list()) / 5.
 
                 self.part_list["tau"].append(row.to_list() + [weight_temp])
             self.part_list["tau"] = pd.DataFrame(self.part_list["tau"])
             self.part_list["tau"].columns = columns_old
+
+
+    @timeit
+    def prim_convert_int(self):     
+        mu_weight, tau_weight = pd.read_csv(f"./input_flux/{self.experiment}_numu_flux.data", header = None, sep = "\s+"), pd.read_csv(f"./input_flux/{self.experiment}_nutau_flux.data", header = None, sep = "\s+")
+        weight_relative = mu_weight[1].sum()/(tau_weight[1].sum() / 5.)
+        self.Data["mu"]["weight"] = [weight_relative]*len(self.Data["mu"]["id"])
+        self.Data["tau"]["weight"] = [1.]*len(self.Data["tau"]["id"])
+        self.part_list = self.Data
